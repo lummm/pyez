@@ -74,7 +74,6 @@ async def run_main_loop(
 )-> None:
     loop = asyncio.get_running_loop()
     try:
-        logging.info("going to connect...")
         app = await reconnect(app)
     except Exception as e:
         logging.exception("failed to connect: %s", e)
