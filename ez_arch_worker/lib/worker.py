@@ -22,7 +22,7 @@ async def handle_work(
     body = frames[4:]
     response = await app.handler(body)
     app.out_s.send_multipart(
-        [b"", RESPONSE_LABEL, return_addr] + list(response)
+        [b"", RESPONSE_LABEL, return_addr, b""] + list(response)
     )
     return
 
