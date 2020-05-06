@@ -8,6 +8,8 @@ from ez_arch_worker.lib.apptypes import Frames
 from ez_arch_worker.lib.apptypes import Handler
 
 
+RESPONSE_LABEL = b""
+
 async def handle_work(
         app: App,
         frames: Frames
@@ -20,7 +22,7 @@ async def handle_work(
     body = frames[4:]
     response = await app.handler(body)
     app.out_s.send_multipart(
-        [b"", b"RESP", return_addr] + list(response)
+        [b"", RESPONSE_LABEL, return_addr] + list(response)
     )
     return
 
