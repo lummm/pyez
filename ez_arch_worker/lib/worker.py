@@ -6,7 +6,6 @@ import zmq
 from ez_arch_worker.lib.apptypes import App
 from ez_arch_worker.lib.apptypes import Frames
 from ez_arch_worker.lib.apptypes import Handler
-from ez_arch_worker.lib.env import ENV
 
 
 async def handle_work(
@@ -29,7 +28,7 @@ async def handle_work(
 async def loop_body(
         app: App
 )-> None:
-    items = await app.poller.poll(ENV.POLL_INTERVAL_S * 1000)
+    items = await app.poller.poll(app.poll_interval_s * 1000)
     if not items:
         return
     items_dict = dict(items)
@@ -50,13 +49,13 @@ async def reconnect(
     poller = zmq.asyncio.Poller()
     router = app.c.socket(zmq.ROUTER)
     router_con_s = "tcp://%s:%s" % (
-        ENV.ROUTER_HOST, app.service_port
+        app.router_host, app.service_port
     )
     router.connect(router_con_s)
     logging.info("router connected to %s", router_con_s)
     dealer = app.c.socket(zmq.DEALER)
     dealer_con_s = "tcp://%s:%s" % (
-        ENV.ROUTER_HOST, ENV.ROUTER_PORT
+        app.router_host, app.router_port
     )
     dealer.connect(dealer_con_s)
     logging.info("dealer connected to %s", dealer_con_s)
@@ -71,30 +70,19 @@ async def reconnect(
 async def run_main_loop(
         app: App
 )-> None:
+    loop = asyncio.get_running_loop()
+    try:
+        logging.info("going to connect...")
+        app = await reconnect(app)
+    except Exception as e:
+        logging.exception("failed to connect: %s", e)
+        loop.stop()
+        return
     while True:
         try:
             await loop_body(app)
         except Exception as e:
             logging.exception("worker died: %s", e)
-            loop = asyncio.get_running_loop()
             loop.stop()
-    return
-
-
-async def start_worker(
-        service_name: bytes,
-        service_port: int,
-        handler: Handler
-)-> None:
-    app = App(
-        c = zmq.asyncio.Context(),
-        in_s = None,
-        out_s = None,
-        poller = None,
-        service_name = service_name,
-        service_port = service_port,
-        handler = handler,
-    )
-    app = await reconnect(app)
-    await run_main_loop(app)
+            return
     return

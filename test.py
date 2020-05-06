@@ -27,7 +27,9 @@ def main():
         worker.run_worker(
             b"ECHO",
             9100,
-            handler
+            handler,
+            router_host = os.environ["ROUTER_HOST"],
+            router_port = int(os.environ["ROUTER_PORT"])
         )
     )
     loop.run_forever()
