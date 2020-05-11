@@ -2,9 +2,9 @@ import logging
 
 import zmq
 
-from app import App
-from app import Frames
-import protoc
+from ez_arch_worker.lib.app import App
+from ez_arch_worker.lib.app import Frames
+import ez_arch_worker.lib.protoc as protoc
 
 
 def send(

@@ -14,7 +14,6 @@ async def loop_body(
     items = await app.poller.poll(app.poll_interval_ms)
     for socket, _event in items:
         frames = await socket.recv_multipart()
-        logging.info("recvd frames: %s", frames)
         assert b"" == frames[0]
         client_return_addr = frames[1]
         req_body = frames[2:]

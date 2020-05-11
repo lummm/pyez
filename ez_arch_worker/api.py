@@ -16,11 +16,11 @@ async def run_worker(
         handler: Handler,
         initial_state: State = None,
         listen_host: str,
-        listen_port: int,
+        port: int,
         poll_interval_ms: int = ez_app.DEFAULT_POLL_INTERVAL_MS
 )-> None:
     app = ez_app.App(
-        con_s = "tcp://{}:{}".format(listen_host, listen_port),
+        con_s = "tcp://{}:{}".format(listen_host, port),
         handler = handler,
         impl_state = initial_state,
         poll_interval_ms = poll_interval_ms,
