@@ -35,7 +35,7 @@ async def run_main_loop(
         return
     while True:
         try:
-            await loop_body(app)
+            app = await loop_body(app)
         except Exception as e:
             logging.exception("worker died: %s", e)
             loop.stop()

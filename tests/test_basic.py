@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from multiprocessing import Process
+import time
 from typing import NamedTuple
 
 import zmq
@@ -79,9 +80,7 @@ def run_pipe(conf: TestConf):
 
 
 def verify_heartbeat(conf: TestConf, frames):
-    assert WORKER == frames[0]
-    assert HEARTBEAT == frames[1]
-    assert conf.service_name == frames[2]
+    assert conf.service_name == frames[0]
     logging.info("heartbeat OK")
     return
 
@@ -92,14 +91,15 @@ def verify_response(
         frames,
         request_id: int
 ):
-    assert WORKER == frames[0]
-    assert REPLY == frames[1]
-    assert request_addr == frames[2]
-    assert b"" == frames[3]
-    body_actual = frames[4:]
+    assert request_addr == frames[0]
+    assert b"" == frames[1]
+    body_actual = frames[2:]
     state = WorkerState(req_count = request_id)
     _state, body = asyncio.run(worker_handler(state, request))
-    assert body == body_actual
+    if not body == body_actual:
+        logging.error("expected body %s", body)
+        logging.error("actual body %s", body_actual)
+        raise Exception("BAD RESPONSE")
     logging.info("response OK")
     return
 
@@ -120,9 +120,10 @@ def parse_msg(frames):
     router_addr = frames[0]
     worker_addr = frames[1]
     assert b"" == frames[2]
-    body = frames[3:]
-    return router_addr, worker_addr, body
-
+    assert WORKER == frames[3]
+    msg_type = frames[4]
+    body = frames[5:]
+    return router_addr, worker_addr, msg_type, body
 
 
 def run_tests(conf: TestConf):
@@ -135,22 +136,33 @@ def run_tests(conf: TestConf):
     if not items:
         raise Exception("NO HEARTBEAT FROM WORKER")
     frames = router.recv_multipart()
-    router_addr, worker_addr, body = parse_msg(frames)
+    router_addr, worker_addr, msg_type, body = parse_msg(frames)
+    assert msg_type == HEARTBEAT
     verify_heartbeat(conf, body)
-    client_addr = b"CLIENT_ADDR"
-    request = [ b"a", b"test", b"request"]
-    send_work_request(router,
-                      router_addr,
-                      worker_addr,
-                      [client_addr] + request)
-    items = poller.poll(5000)
-    if not items:
-        raise Exception("NO RESPONSE FROM WORKER")
-    frames = router.recv_multipart()
-    _router_addr, _worker_addr, body = parse_msg(frames)
-    verify_response(
-        client_addr, request, body, 0
-    )
+    def test_request(req_id: int):
+        client_addr = b"CLIENT_ADDR"
+        request = [b"a", b"test", b"request"]
+        send_work_request(router,
+                          router_addr,
+                          worker_addr,
+                          [client_addr] + request)
+        items = poller.poll(5000)
+        if not items:
+            raise Exception("NO RESPONSE FROM WORKER")
+        msg_type, body = None, None
+        timeout = time.time() + 5
+        while msg_type != REPLY:
+            if time.time() > timeout:
+                raise Exception("REQUEST TIMED OUT")
+            frames = router.recv_multipart()
+            _router_addr, _worker_addr, msg_type, body = parse_msg(frames)
+        verify_response(
+            client_addr, request, body, req_id
+        )
+        return
+    test_request(0)
+    test_request(1)
+    test_request(2)
     return
 
 
