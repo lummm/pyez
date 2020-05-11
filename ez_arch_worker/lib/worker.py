@@ -1,72 +1,27 @@
 import asyncio
 import logging
 
-import zmq
-
-from ez_arch_worker.lib.apptypes import App
-from ez_arch_worker.lib.apptypes import Frames
-from ez_arch_worker.lib.apptypes import Handler
-
-
-RESPONSE_LABEL = b""
-
-async def handle_work(
-        app: App,
-        frames: Frames
-)-> None:
-    logging.debug("recvd frames: %s", frames)
-    router_addr = frames[0]
-    assert app.service_name == frames[1]
-    return_addr = frames[2]
-    assert b"" == frames[3]
-    body = frames[4:]
-    response = await app.handler(body)
-    app.out_s.send_multipart(
-        [b"", RESPONSE_LABEL, return_addr, b""] + list(response)
-    )
-    return
+from ez_arch_worker.lib.app import App
+from ez_arch_worker.lib.app import Handler
+from ez_arch_worker.lib.app import State
+import ez_arch_worker.lib.msg as msg
 
 
 async def loop_body(
         app: App
-)-> None:
-    items = await app.poller.poll(app.poll_interval_s * 1000)
-    if not items:
-        return
-    items_dict = dict(items)
-    if items_dict.get(app.in_s):
-        frames = await app.in_s.recv_multipart()
-        asyncio.create_task(handle_work(app, tuple(frames)))
-    return
-
-
-async def reconnect(
-        app: App
 )-> App:
-    if app.in_s:
-        app.poller.unregister(app.in_s)
-        app.in_s.close()
-    if app.out_s:
-        app.out_s.close()
-    poller = zmq.asyncio.Poller()
-    router = app.c.socket(zmq.ROUTER)
-    router_con_s = "tcp://%s:%s" % (
-        app.router_host, app.service_port
-    )
-    router.connect(router_con_s)
-    logging.info("router connected to %s", router_con_s)
-    dealer = app.c.socket(zmq.DEALER)
-    dealer_con_s = "tcp://%s:%s" % (
-        app.router_host, app.router_port
-    )
-    dealer.connect(dealer_con_s)
-    logging.info("dealer connected to %s", dealer_con_s)
-    poller.register(router, zmq.POLLIN)
-    return app._replace(
-        in_s = router,
-        out_s = dealer,
-        poller = poller,
-    )
+    msg.send_heartbeat(app)
+    items = await app.poller.poll(app.poll_interval_ms)
+    for socket, _event in items:
+        frames = await socket.recv_multipart()
+        logging.info("recvd frames: %s", frames)
+        assert b"" == frames[0]
+        client_return_addr = frames[1]
+        req_body = frames[2:]
+        state, reply = await app.handler(app.impl_state, req_body)
+        app = app._replace(impl_state = state)
+        msg.send_response(app, client_return_addr, reply)
+    return app
 
 
 async def run_main_loop(
@@ -74,7 +29,7 @@ async def run_main_loop(
 )-> None:
     loop = asyncio.get_running_loop()
     try:
-        app = await reconnect(app)
+        app = await msg.connect(app)
     except Exception as e:
         logging.exception("failed to connect: %s", e)
         loop.stop()

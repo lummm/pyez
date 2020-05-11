@@ -1,33 +1,30 @@
 import asyncio
 import logging
 
-from ez_arch_worker.lib import worker
-from ez_arch_worker.lib import apptypes
+import ez_arch_worker.lib.app as ez_app
+import ez_arch_worker.lib.worker as worker
 
 
-Frames = apptypes.Frames
-Handler = apptypes.Handler
-
+Frames = ez_app.Frames
+Handler = ez_app.Handler
+State = ez_app.State
 
 
 async def run_worker(
+        *,
         service_name: bytes,
-        service_port: int,
         handler: Handler,
-        router_host: str = "127.0.0.1",
-        router_port: int = 5555,
-        poll_interval_s: int = apptypes.DEFAULT_POLL_INTERVAL_S
+        initial_state: State = None,
+        listen_host: str,
+        listen_port: int,
+        poll_interval_ms: int = ez_app.DEFAULT_POLL_INTERVAL_MS
 )-> None:
-    app = apptypes.App(
-        in_s = None,
-        out_s = None,
-        poller = None,
-        service_name = service_name,
-        service_port = service_port,
+    app = ez_app.App(
+        con_s = "tcp://{}:{}".format(listen_host, listen_port),
         handler = handler,
-        poll_interval_s = poll_interval_s,
-        router_host = router_host,
-        router_port = router_port,
+        impl_state = initial_state,
+        poll_interval_ms = poll_interval_ms,
+        service_name = service_name,
     )
     await worker.run_main_loop(app)
     return
