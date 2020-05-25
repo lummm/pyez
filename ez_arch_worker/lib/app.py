@@ -9,14 +9,16 @@ import zmq.asyncio
 
 DEFAULT_POLL_INTERVAL_MS = 3000
 
-State = Any
+Ctx = zmq.asyncio.Context
 Frames = List[bytes]
+State = Any
 Handler = Callable[[State, Frames],
                    Awaitable[Tuple[State, Frames]]]
 
+
 class App(NamedTuple):
     handler: Handler
-    c: zmq.asyncio.Context = zmq.asyncio.Context()
+    c: Ctx = zmq.asyncio.Context()
     con_s: str = ""
     dealer: zmq.asyncio.Socket = None
     impl_state: State = None
