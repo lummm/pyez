@@ -18,7 +18,7 @@ Handler = Callable[[State, Frames],
 
 class App(NamedTuple):
     handler: Handler
-    c: Ctx = zmq.asyncio.Context()
+    c: zmq.asyncio.Context = zmq.asyncio.Context()
     con_s: str = ""
     dealer: zmq.asyncio.Socket = None
     impl_state: State = None

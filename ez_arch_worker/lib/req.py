@@ -1,3 +1,4 @@
+from typing import Awaitable
 from typing import Callable
 
 import zmq
@@ -8,7 +9,7 @@ from ez_arch_worker.lib.app import Frames
 import ez_arch_worker.lib.protoc as protoc
 
 
-EzClient = Callable[[str, Frames], Frames]
+EzClient = Callable[[Frames, int, int], Awaitable[Frames]]
 
 DEFAULT_TIMEOUT_MS = 3000
 DEFAULT_ATTEMPTS = 3
@@ -60,8 +61,8 @@ async def new_client(
 
     async def r(
             frames: Frames,
-            timeout_ms=DEFAULT_TIMEOUT_MS,
-            retries=DEFAULT_ATTEMPTS
+            timeout_ms: int = DEFAULT_TIMEOUT_MS,
+            retries: int = DEFAULT_ATTEMPTS
     ):
         return await full_req(ctx, host, port, frames, timeout_ms, retries)
     return r
