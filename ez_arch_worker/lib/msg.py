@@ -10,8 +10,8 @@ import ez_arch_worker.lib.protoc as protoc
 def send(
         app: App,
         frames: Frames
-)-> None:
-    frames = [b"", protoc.WORKER] + frames # INPUT FLAT
+) -> None:
+    frames = [b"", protoc.WORKER] + frames  # INPUT FLAT
     app.dealer.send_multipart(frames)
     return
 
@@ -20,12 +20,12 @@ def send_response(
         app: App,
         dest: bytes,
         reply: Frames
-)-> None:
+) -> None:
     frames = [protoc.REPLY, dest, b""] + reply
     return send(app, frames)
 
 
-def send_heartbeat(app: App)-> None:
+def send_heartbeat(app: App) -> None:
     frames = [
         protoc.HEARTBEAT,       # WORKER LEVEL 1
         app.service_name        # LEVEL 2 HEARTBEAT
@@ -33,11 +33,11 @@ def send_heartbeat(app: App)-> None:
     return send(app, frames)
 
 
-async def connect(app: App)-> App:
+async def connect(app: App) -> App:
     dealer = app.c.socket(zmq.DEALER)
     dealer.connect(app.con_s)
     logging.info("dealer connected to %s", app.con_s)
     app.poller.register(dealer, zmq.POLLIN)
     return app._replace(
-        dealer = dealer,
+        dealer=dealer,
     )
