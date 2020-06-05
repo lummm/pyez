@@ -1,5 +1,8 @@
+import asyncio
+import logging
 from typing import Awaitable
 from typing import Callable
+from typing import NamedTuple
 
 import zmq
 import zmq.asyncio
@@ -11,21 +14,29 @@ import ez_arch_worker.lib.protoc as protoc
 
 EzClient = Callable[[Frames, int, int], Awaitable[Frames]]
 
-DEFAULT_TIMEOUT_MS = 3000
-DEFAULT_ATTEMPTS = 3
+DEFAULT_TIMEOUT_MS = 5000
+DEFAULT_ATTEMPTS = 2
+DEFAULT_SOCKET_POOL = 100
+
+
+class ClientState(NamedTuple):
+    ctx: zmq.asyncio.Context
+    con_s: str
+    sockets: asyncio.Queue
+
+
+def new_socket(state: ClientState) -> zmq.asyncio.Socket:
+    socket = state.ctx.socket(zmq.DEALER)
+    socket.connect(state.con_s)
+    return socket
 
 
 async def single_req(
-        c: Ctx,
-        host: str,
-        port: int,
+        socket: zmq.asyncio.Socket,
         frames: Frames,
         timeout_ms: int = DEFAULT_TIMEOUT_MS
 ) -> Frames:
-    con_s = "tcp://{}:{}".format(host, port)
-    socket = c.socket(zmq.REQ)
-    socket.connect(con_s)
-    req_frames = [protoc.CLIENT] + frames
+    req_frames = [b"", protoc.CLIENT] + frames
     socket.setsockopt(zmq.RCVTIMEO, timeout_ms)
     socket.send_multipart(req_frames)
     res = await socket.recv_multipart()
@@ -33,36 +44,47 @@ async def single_req(
 
 
 async def full_req(
-        c: Ctx,
-        host: str,
-        port: int,
+        state: ClientState,
         frames: Frames,
         timeout_ms: int = DEFAULT_TIMEOUT_MS,
         attempts: int = DEFAULT_ATTEMPTS
 ) -> Frames:
-    attempt = 0
+    attempt = 1
     res: Frames = []
     while not res:
+        socket = await state.sockets.get()
         try:
-            res = await single_req(c, host, port, frames, timeout_ms)
+            res = await single_req(socket, frames, timeout_ms)
+            state.sockets.put_nowait(socket)
         except Exception as e:
-            if attempt < attempts:
-                attempt = attempt + 1
-            else:
+            socket.setsockopt(zmq.LINGER, 0)
+            socket.close()
+            state.sockets.put_nowait(new_socket(state))
+            attempt = attempt + 1
+            if attempt > attempts:
                 raise e
     return res
 
 
 async def new_client(
         host: str,
-        port: int
+        port: int,
+        socket_pool: int = DEFAULT_SOCKET_POOL
 ) -> EzClient:
-    ctx = zmq.asyncio.Context()
+    state = ClientState(
+        ctx=zmq.asyncio.Context(),
+        con_s="tcp://{}:{}".format(host, port),
+        sockets=asyncio.Queue(socket_pool)
+    )
+    for i in range(socket_pool):
+        state.sockets.put_nowait(new_socket(state))
+    logging.info("opened %s DEALER sockets", socket_pool)
 
     async def r(
             frames: Frames,
             timeout_ms: int = DEFAULT_TIMEOUT_MS,
             retries: int = DEFAULT_ATTEMPTS
     ):
-        return await full_req(ctx, host, port, frames, timeout_ms, retries)
+        res = await full_req(state, frames, timeout_ms, retries)
+        return res
     return r

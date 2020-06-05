@@ -25,7 +25,7 @@ async def run_worker(
         poll_interval_ms=poll_interval_ms,
         service_name=service_name,
     )
-    await worker.run_main_loop(app)
+    await worker.run_worker(app)
     return
 
 
