@@ -1,4 +1,3 @@
-import asyncio
 from typing import Any
 from typing import Awaitable
 from typing import Callable
@@ -25,5 +24,4 @@ class App(NamedTuple):
     impl_state: State = None
     poller: zmq.asyncio.Poller = zmq.asyncio.Poller()
     poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS
-    q: asyncio.Queue = asyncio.Queue()
     service_name: bytes = b""

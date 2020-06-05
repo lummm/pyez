@@ -16,20 +16,10 @@ async def handle(
     return
 
 
-async def run_handle_loop(app: App) -> None:
-    loop = asyncio.get_event_loop()
-    while True:
-        try:
-            client_return_addr, work = await app.q.get()
-            loop.create_task(handle(app, work, client_return_addr))
-        except Exception as e:
-            logging.exception("worker died: %s", e)
-            loop.stop()
-            return
-    return
-
-
-async def listen_loop_body(app: App) -> None:
+async def listen_loop_body(
+        app: App,
+        loop: asyncio.AbstractEventLoop
+) -> None:
     msg.send_heartbeat(app)
     items = await app.poller.poll(app.poll_interval_ms)
     for socket, _event in items:
@@ -37,15 +27,16 @@ async def listen_loop_body(app: App) -> None:
         assert b"" == frames[0]
         client_return_addr = frames[1]
         req_body = frames[2:]
-        app.q.put_nowait((client_return_addr, req_body))
+        loop.create_task(
+            handle(app, req_body, client_return_addr))
     return
 
 
 async def run_listen_loop(app: App) -> None:
-    loop = asyncio.get_running_loop()
+    loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
     while True:
         try:
-            await listen_loop_body(app)
+            await listen_loop_body(app, loop)
         except Exception as e:
             logging.exception("worker died: %s", e)
             loop.stop()
@@ -54,16 +45,12 @@ async def run_listen_loop(app: App) -> None:
 
 
 async def run_worker(app: App) -> None:
-    loop = asyncio.get_event_loop()
     try:
         app = await msg.connect(app)
-        app = app._replace(q=asyncio.Queue())
     except Exception as e:
         logging.exception("failed to connect: %s", e)
+        loop = asyncio.get_event_loop()
         loop.stop()
         return
-    await asyncio.gather(
-        run_handle_loop(app),
-        run_listen_loop(app)
-    )
+    await run_listen_loop(app)
     return
