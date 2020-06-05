@@ -25,7 +25,7 @@ class TestConf(NamedTuple):
     service_name: bytes = b"TEST"
 
 
-def setup_logging()-> None:
+def setup_logging() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format=f"%(asctime)s.%(msecs)03d "
@@ -41,7 +41,7 @@ async def worker_handler(
 ):
     response = [b"ECHO", b"%d" % state.req_count] + frames
     new_state = state._replace(
-        req_count = state.req_count + 1
+        req_count=state.req_count + 1
     )
     return (new_state, response)
 
@@ -49,11 +49,11 @@ async def worker_handler(
 def run_worker(conf: TestConf):
     asyncio.run(
         ez_worker.run_worker(
-            service_name = conf.service_name,
-            handler = worker_handler,
-            initial_state = WorkerState(),
-            listen_host = "localhost",
-            port = conf.work_router_port,
+            service_name=conf.service_name,
+            handler=worker_handler,
+            initial_state=WorkerState(),
+            listen_host="localhost",
+            port=conf.work_router_port,
         )
     )
     return
@@ -94,7 +94,7 @@ def verify_response(
     assert request_addr == frames[0]
     assert b"" == frames[1]
     body_actual = frames[2:]
-    state = WorkerState(req_count = request_id)
+    state = WorkerState(req_count=request_id)
     _state, body = asyncio.run(worker_handler(state, request))
     if not body == body_actual:
         logging.error("expected body %s", body)
@@ -139,6 +139,7 @@ def run_tests(conf: TestConf):
     router_addr, worker_addr, msg_type, body = parse_msg(frames)
     assert msg_type == HEARTBEAT
     verify_heartbeat(conf, body)
+
     def test_request(req_id: int):
         client_addr = b"CLIENT_ADDR"
         request = [b"a", b"test", b"request"]
@@ -170,8 +171,8 @@ def main():
     setup_logging()
     logging.info("---- BEGIN ----")
     conf = TestConf()
-    pipe_ps = Process(target = run_pipe, args = (conf,))
-    app_ps = Process(target = run_worker, args = (conf,))
+    pipe_ps = Process(target=run_pipe, args=(conf,))
+    app_ps = Process(target=run_worker, args=(conf,))
     app_ps.daemon = True
     pipe_ps.daemon = True
     pipe_ps.start()
