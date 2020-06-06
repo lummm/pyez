@@ -9,10 +9,11 @@ import ez_arch_worker.lib.msg as msg
 async def handle(
         app: App,
         work: Frames,
-        return_addr: bytes
+        return_addr: bytes,
+        request_id: bytes
 ) -> None:
     reply = await app.handler(app.impl_state, work)
-    msg.send_response(app, return_addr, reply)
+    msg.send_response(app, return_addr, request_id, reply)
     return
 
 
@@ -26,9 +27,10 @@ async def listen_loop_body(
         frames = await socket.recv_multipart()
         assert b"" == frames[0]
         client_return_addr = frames[1]
-        req_body = frames[2:]
+        request_id = frames[2]
+        req_body = frames[3:]
         loop.create_task(
-            handle(app, req_body, client_return_addr))
+            handle(app, req_body, client_return_addr, request_id))
     return
 
 

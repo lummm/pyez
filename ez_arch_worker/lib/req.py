@@ -1,8 +1,11 @@
 import asyncio
 import logging
+import time
 from typing import Awaitable
 from typing import Callable
-from typing import NamedTuple
+from typing import Dict
+from typing import Tuple
+from types import SimpleNamespace
 
 import zmq
 import zmq.asyncio
@@ -19,27 +22,39 @@ DEFAULT_ATTEMPTS = 2
 DEFAULT_SOCKET_POOL = 100
 
 
-class ClientState(NamedTuple):
+class ClientState(SimpleNamespace):
     ctx: zmq.asyncio.Context
     con_s: str
-    sockets: asyncio.Queue
+    socket: zmq.asyncio.Socket
+    responses: Dict[bytes, asyncio.Queue]
 
 
-def new_socket(state: ClientState) -> zmq.asyncio.Socket:
+def reconnect(state: ClientState) -> None:
+    if state.socket:
+        state.socket.setsockopt(zmq.LINGER, 0)
+        state.socket.close()
     socket = state.ctx.socket(zmq.DEALER)
     socket.connect(state.con_s)
-    return socket
+    logging.info("dealer connected to %s", state.con_s)
+    state.socket = socket
+    return
+
+
+def get_req_id() -> bytes:
+    return b"%f" % time.time()
 
 
 async def single_req(
-        socket: zmq.asyncio.Socket,
+        state: ClientState,
+        req_id: bytes,
         frames: Frames,
         timeout_ms: int = DEFAULT_TIMEOUT_MS
 ) -> Frames:
-    req_frames = [b"", protoc.CLIENT] + frames
-    socket.setsockopt(zmq.RCVTIMEO, timeout_ms)
-    socket.send_multipart(req_frames)
-    res = await socket.recv_multipart()
+    req_frames = [b"", protoc.CLIENT, req_id] + frames
+    state.socket.send_multipart(req_frames)
+    res = await asyncio.wait_for(
+        state.responses[req_id].get(), timeout_ms / 1000.0
+    )
     return res
 
 
@@ -48,43 +63,64 @@ async def full_req(
         frames: Frames,
         timeout_ms: int = DEFAULT_TIMEOUT_MS,
         attempts: int = DEFAULT_ATTEMPTS
-) -> Frames:
+) -> Tuple[ClientState, Frames]:
     attempt = 1
+    req_id = get_req_id()
     res: Frames = []
+    state.responses[req_id] = asyncio.Queue(1)
     while not res:
-        socket = await state.sockets.get()
         try:
-            res = await single_req(socket, frames, timeout_ms)
-            state.sockets.put_nowait(socket)
+            res = await single_req(state, req_id, frames, timeout_ms)
+            state.responses.pop(req_id, None)
         except Exception as e:
-            socket.setsockopt(zmq.LINGER, 0)
-            socket.close()
-            state.sockets.put_nowait(new_socket(state))
+            reconnect(state)
             attempt = attempt + 1
             if attempt > attempts:
+                state.responses.pop(req_id, None)
                 raise e
-    return res
+    return state, res
+
+
+async def listen_for_responses(state: ClientState) -> None:
+    loop = asyncio.get_event_loop()
+    while True:
+        try:
+            res = await state.socket.recv_multipart()
+            assert b"" == res[0]
+            req_id = res[1]
+            response = res[2:]
+            if req_id not in state.responses:
+                logging.error("received response for %s after request expired",
+                              req_id)
+                return
+            state.responses[req_id].put_nowait(response)
+        except Exception as e:
+            logging.exception("died handling response: %s", e)
+            loop.stop()
+            return
+    return
 
 
 async def new_client(
         host: str,
-        port: int,
-        socket_pool: int = DEFAULT_SOCKET_POOL
+        port: int
 ) -> EzClient:
     state = ClientState(
         ctx=zmq.asyncio.Context(),
         con_s="tcp://{}:{}".format(host, port),
-        sockets=asyncio.Queue(socket_pool)
+        socket=None,
+        responses={},
     )
-    for i in range(socket_pool):
-        state.sockets.put_nowait(new_socket(state))
-    logging.info("opened %s DEALER sockets", socket_pool)
+    reconnect(state)
+    loop = asyncio.get_event_loop()
+    loop.create_task(listen_for_responses(state))
 
     async def r(
             frames: Frames,
             timeout_ms: int = DEFAULT_TIMEOUT_MS,
             retries: int = DEFAULT_ATTEMPTS
     ):
-        res = await full_req(state, frames, timeout_ms, retries)
+        nonlocal state
+        state, res = await full_req(state, frames, timeout_ms, retries)
         return res
     return r
