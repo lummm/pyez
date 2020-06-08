@@ -12,8 +12,13 @@ async def handle(
         return_addr: bytes,
         request_id: bytes
 ) -> None:
-    reply = await app.handler(app.impl_state, work)
-    msg.send_response(app, return_addr, request_id, reply)
+    try:
+        reply = await app.handler(app.impl_state, work)
+        msg.send_response(app, return_addr, request_id, reply)
+    except Exception as e:
+        loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
+        logging.exception("worker died: %s", e)
+        loop.stop()
     return
 
 
