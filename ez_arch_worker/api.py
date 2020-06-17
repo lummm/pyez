@@ -1,4 +1,3 @@
-from ez_arch_worker.lib.app import app
 import ez_arch_worker.lib.app as ez_app
 import ez_arch_worker.lib.worker as worker
 import ez_arch_worker.lib.req as req
@@ -15,15 +14,15 @@ async def run_worker(
         handler: Handler,
         listen_host: str,
         port: int,
-        poll_interval_ms: int
+        poll_interval_ms: int = None
 ) -> None:
-    app.init(
+    ez_app.init(
         con_s="tcp://{}:{}".format(listen_host, port),
         handler_impl=handler,
         service_name=service_name
     )
     if poll_interval_ms is not None:
-        app.poll_interval_ms = poll_interval_ms
+        ez_app.state.poll_interval_ms = poll_interval_ms
     await worker.run_worker()
     return
 

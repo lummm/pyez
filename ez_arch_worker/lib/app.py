@@ -1,4 +1,3 @@
-from typing import Any
 from typing import Awaitable
 from typing import Callable
 from typing import List
@@ -19,27 +18,24 @@ Handler = Callable[[Frames],
 class App(SimpleNamespace):
     c: zmq.asyncio.Context = zmq.asyncio.Context()
     con_s: str = ""
+    handler: Handler
     dealer: zmq.asyncio.Socket = None
     poller: zmq.asyncio.Poller = zmq.asyncio.Poller()
     poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS
     service_name: bytes = b""
 
 
-app: App
-handler: Handler
+state = App(handler=None)
 
 
 def init(
         *,
         con_s: str,
         handler_impl: Handler,
-        service_name: str
+        service_name: bytes
 ) -> None:
-    global app
     global handler
-    app = App(
-        con_s=con_s,
-        service_name=service_name
-    )
-    handler = handler_impl
+    state.con_s = con_s
+    state.service_name = service_name
+    state.handler = handler_impl # type: ignore
     return

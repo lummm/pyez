@@ -1,8 +1,7 @@
 import asyncio
 import logging
 
-from ez_arch_worker.lib.app import app
-from ez_arch_worker.lib.app import handler
+from ez_arch_worker.lib.app import state as app
 from ez_arch_worker.lib.app import Frames
 import ez_arch_worker.lib.msg as msg
 
@@ -13,7 +12,7 @@ async def handle(
         request_id: bytes
 ) -> None:
     try:
-        reply = await handler(work)
+        reply = await app.handler(work) # type: ignore
         msg.send_response(return_addr, request_id, reply)
     except Exception as e:
         loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()

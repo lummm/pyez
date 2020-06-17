@@ -2,7 +2,7 @@ import logging
 
 import zmq
 
-from ez_arch_worker.lib.app import app
+from ez_arch_worker.lib.app import state as app
 from ez_arch_worker.lib.app import Frames
 import ez_arch_worker.lib.protoc as protoc
 
