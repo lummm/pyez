@@ -1,20 +1,20 @@
 import asyncio
 import logging
 
-from ez_arch_worker.lib.app import App
+from ez_arch_worker.lib.app import app
+from ez_arch_worker.lib.app import handler
 from ez_arch_worker.lib.app import Frames
 import ez_arch_worker.lib.msg as msg
 
 
 async def handle(
-        app: App,
         work: Frames,
         return_addr: bytes,
         request_id: bytes
 ) -> None:
     try:
-        reply = await app.handler(app.impl_state, work)
-        msg.send_response(app, return_addr, request_id, reply)
+        reply = await handler(work)
+        msg.send_response(return_addr, request_id, reply)
     except Exception as e:
         loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
         logging.exception("worker died: %s", e)
@@ -23,10 +23,9 @@ async def handle(
 
 
 async def listen_loop_body(
-        app: App,
         loop: asyncio.AbstractEventLoop
 ) -> None:
-    msg.send_heartbeat(app)
+    msg.send_heartbeat()
     items = await app.poller.poll(app.poll_interval_ms)
     for socket, _event in items:
         frames = await socket.recv_multipart()
@@ -35,15 +34,15 @@ async def listen_loop_body(
         request_id = frames[2]
         req_body = frames[3:]
         loop.create_task(
-            handle(app, req_body, client_return_addr, request_id))
+            handle(req_body, client_return_addr, request_id))
     return
 
 
-async def run_listen_loop(app: App) -> None:
+async def run_listen_loop() -> None:
     loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
     while True:
         try:
-            await listen_loop_body(app, loop)
+            await listen_loop_body(loop)
         except Exception as e:
             logging.exception("worker died: %s", e)
             loop.stop()
@@ -51,13 +50,13 @@ async def run_listen_loop(app: App) -> None:
     return
 
 
-async def run_worker(app: App) -> None:
+async def run_worker() -> None:
     try:
-        app = await msg.connect(app)
+        await msg.connect()
     except Exception as e:
         logging.exception("failed to connect: %s", e)
         loop = asyncio.get_event_loop()
         loop.stop()
         return
-    await run_listen_loop(app)
+    await run_listen_loop()
     return

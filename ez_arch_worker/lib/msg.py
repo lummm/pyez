@@ -2,13 +2,12 @@ import logging
 
 import zmq
 
-from ez_arch_worker.lib.app import App
+from ez_arch_worker.lib.app import app
 from ez_arch_worker.lib.app import Frames
 import ez_arch_worker.lib.protoc as protoc
 
 
 def send(
-        app: App,
         frames: Frames
 ) -> None:
     frames = [b"", protoc.WORKER] + frames  # INPUT FLAT
@@ -17,28 +16,28 @@ def send(
 
 
 def send_response(
-        app: App,
         dest: bytes,
         request_id: bytes,
         reply: Frames
 ) -> None:
     frames = [protoc.REPLY, dest, b"", request_id] + reply
-    return send(app, frames)
+    send(frames)
+    return
 
 
-def send_heartbeat(app: App) -> None:
+def send_heartbeat() -> None:
     frames = [
         protoc.HEARTBEAT,       # WORKER LEVEL 1
         app.service_name        # LEVEL 2 HEARTBEAT
     ]
-    return send(app, frames)
+    send(frames)
+    return
 
 
-async def connect(app: App) -> App:
+async def connect() -> None:
     dealer = app.c.socket(zmq.DEALER)
     dealer.connect(app.con_s)
     logging.info("dealer connected to %s", app.con_s)
     app.poller.register(dealer, zmq.POLLIN)
-    return app._replace(
-        dealer=dealer,
-    )
+    app.dealer = dealer
+    return
