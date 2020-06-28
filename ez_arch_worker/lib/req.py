@@ -135,6 +135,8 @@ class EzClient():
     async def reset(self) -> None:
         await self.close()
         self.state = await new_state(self.state.host, self.state.port)
+        loop = asyncio.get_event_loop()
+        self.listen_task = loop.create_task(listen_for_responses(self.state))
         return
 
     async def close(self) -> None:
