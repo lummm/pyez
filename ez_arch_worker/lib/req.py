@@ -82,8 +82,8 @@ async def full_req(
 
 
 async def listen_for_responses(state: ClientState) -> None:
-    loop = asyncio.get_event_loop()
     while True:
+        res: Frames
         try:
             res = await state.socket.recv_multipart()
             assert b"" == res[0]
@@ -95,9 +95,11 @@ async def listen_for_responses(state: ClientState) -> None:
                 return
             state.responses[req_id].put_nowait(response)
         except Exception as e:
-            logging.exception("died handling response: %s", e)
-            loop.stop()
-            return
+            if res:
+                logging.exception("died handling response frames: %s - %s",
+                                  res, e)
+            else:
+                logging.exception("died handling response - %s", e)
     return
 
 
