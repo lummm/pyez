@@ -1,8 +1,6 @@
 import asyncio
 import logging
 import time
-from typing import Awaitable
-from typing import Callable
 from typing import Dict
 from typing import Tuple
 from types import SimpleNamespace
@@ -10,12 +8,9 @@ from types import SimpleNamespace
 import zmq
 import zmq.asyncio
 
-from ez_arch_worker.lib.app import Ctx
 from ez_arch_worker.lib.app import Frames
 import ez_arch_worker.lib.protoc as protoc
 
-
-EzClient = Callable[[Frames, int, int], Awaitable[Frames]]
 
 DEFAULT_TIMEOUT_MS = 5000
 DEFAULT_ATTEMPTS = 2
@@ -23,6 +18,8 @@ DEFAULT_SOCKET_POOL = 100
 
 
 class ClientState(SimpleNamespace):
+    host: str
+    port: int
     ctx: zmq.asyncio.Context
     con_s: str
     socket: zmq.asyncio.Socket
@@ -103,26 +100,55 @@ async def listen_for_responses(state: ClientState) -> None:
     return
 
 
-async def new_client(
-        host: str,
-        port: int
-) -> EzClient:
+async def new_state(host: str, port: int) -> ClientState:
     state = ClientState(
+        host=host,
+        port=port,
         ctx=zmq.asyncio.Context(),
         con_s="tcp://{}:{}".format(host, port),
         socket=None,
         responses={},
     )
     reconnect(state)
-    loop = asyncio.get_event_loop()
-    loop.create_task(listen_for_responses(state))
+    return state
+
+
+class EzClient():
+    def __init__(
+            self,
+            state: ClientState,
+            listen_task: asyncio.Task
+    ) -> None:
+        self.state = state
+        self.listen_task = listen_task
+        return
 
     async def r(
+            self,
             frames: Frames,
             timeout_ms: int = DEFAULT_TIMEOUT_MS,
             retries: int = DEFAULT_ATTEMPTS
-    ):
-        nonlocal state
-        state, res = await full_req(state, frames, timeout_ms, retries)
+    ) -> Frames:
+        state, res = await full_req(self.state, frames, timeout_ms, retries)
         return res
-    return r
+
+    async def reset(self) -> None:
+        await self.close()
+        self.state = await new_state(self.state.host, self.state.port)
+        return
+
+    async def close(self) -> None:
+        self.listen_task.cancel()
+        self.state.ctx.destroy()
+        return
+
+
+async def new_client(
+        host: str,
+        port: int
+) -> EzClient:
+    state = await new_state(host, port)
+    loop = asyncio.get_event_loop()
+    listen_task = loop.create_task(listen_for_responses(state))
+    client = EzClient(state, listen_task)
+    return client
