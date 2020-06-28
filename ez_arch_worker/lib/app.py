@@ -34,7 +34,6 @@ def init(
         handler_impl: Handler,
         service_name: bytes
 ) -> None:
-    global handler
     state.con_s = con_s
     state.service_name = service_name
     state.handler = handler_impl # type: ignore
