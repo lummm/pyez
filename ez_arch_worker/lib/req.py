@@ -91,6 +91,8 @@ async def listen_for_responses(state: ClientState) -> None:
                               req_id)
                 return
             state.responses[req_id].put_nowait(response)
+        except asyncio.CancelledError:
+            return
         except Exception as e:
             if res:
                 logging.exception("died handling response frames: %s - %s",
