@@ -12,7 +12,7 @@ async def handle(
         request_id: bytes
 ) -> None:
     try:
-        reply = await app.handler(work) # type: ignore
+        reply = await app.handler(work)  # type: ignore
         msg.send_response(return_addr, request_id, reply)
     except Exception as e:
         loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
