@@ -70,7 +70,6 @@ async def full_req(
             res = await single_req(state, req_id, frames, timeout_ms)
             state.responses.pop(req_id, None)
         except Exception as e:
-            reconnect(state)
             attempt = attempt + 1
             if attempt > attempts:
                 state.responses.pop(req_id, None)
