@@ -1,7 +1,8 @@
 import asyncio
 import os
 import logging
-from typing import NamedTuple
+from typing import Callable
+from typing import List
 from types import SimpleNamespace
 
 import zmq
@@ -14,22 +15,18 @@ POLL_INTERVAL_MS = 3000
 WORKER_LIFETIME_S = 4000
 
 
-class _ENV(NamedTuple):
-    EZ_INPUT_PORT: int = int(os.environ["EZ_INPUT_PORT"])
-    EZ_WORKER_PORT: int = int(os.environ["EZ_WORKER_PORT"])
-    SERVICE_NAME: str = os.environ["SERVICE_NAME"]
-
-
 class App(SimpleNamespace):
+    EZ_INPUT_PORT: int
+    EZ_WORKER_PORT: int
     service_name: bytes
     ctx: zmq.asyncio.Context
+    mocks: Callable[[List[bytes]], List[bytes]]
     poller: zmq.asyncio.Poller
     input_router: zmq.asyncio.Socket
     worker_addr: bytes
     worker_router: zmq.asyncio.Socket
 
 
-ENV = _ENV()
 app = App()
 
 
@@ -43,12 +40,12 @@ async def reconnect() -> None:
     input_router = ctx.socket(zmq.ROUTER)
     worker_router = ctx.socket(zmq.ROUTER)
 
-    input_router.bind("tcp://*:{}".format(ENV.EZ_INPUT_PORT))
-    logging.info("input listening at %s", ENV.EZ_INPUT_PORT)
+    input_router.bind("tcp://*:{}".format(app.EZ_INPUT_PORT))
+    logging.info("input listening at %s", app.EZ_INPUT_PORT)
     poller.register(input_router, zmq.POLLIN)
 
-    worker_router.bind("tcp://*:{}".format(ENV.EZ_WORKER_PORT))
-    logging.info("worker router listening at %s", ENV.EZ_WORKER_PORT)
+    worker_router.bind("tcp://*:{}".format(app.EZ_WORKER_PORT))
+    logging.info("worker router listening at %s", app.EZ_WORKER_PORT)
     poller.register(worker_router, zmq.POLLIN)
 
     app.ctx = ctx
@@ -63,11 +60,17 @@ async def handle_req(
         frames
 ) -> None:
     request_id = frames[0]
-    assert app.service_name == frames[1]
-    body = frames[2:]
-    app.worker_router.send_multipart(
-        [app.worker_addr, b"", return_addr, request_id] + body
-    )
+    if app.service_name == frames[1]:  # the target service
+        body = frames[2:]
+        app.worker_router.send_multipart(
+            [app.worker_addr, b"", return_addr, request_id] + body
+        )
+        return
+    # a mock
+    body = frames[1:]
+    res_body = app.mocks(body)
+    res = [return_addr, b"", request_id] + res_body
+    await handle_reply(res)
     return
 
 
@@ -116,7 +119,17 @@ async def route_loop() -> None:
     return
 
 
-async def run_mock_router():
+async def run_mock_router(
+        *,
+        ez_input_port: int,
+        ez_worker_port: int,
+        service_name: bytes,
+        mocks: Callable[[List[bytes]], List[bytes]] = lambda x: []
+):
+    app.EZ_INPUT_PORT = ez_input_port
+    app.EZ_WORKER_PORT = ez_worker_port
+    app.service_name = service_name
+    app.mocks = mocks
     await reconnect()
     while True:
         await route_loop()
@@ -124,9 +137,16 @@ async def run_mock_router():
 
 
 async def main():
-    app.service_name = ENV.SERVICE_NAME.encode("utf-8")
     logging.basicConfig(level="INFO")
-    await run_mock_router()
+
+    def echo_mock(frames):
+        return [b"OK", frames[2]]
+    await run_mock_router(
+        ez_input_port=int(os.environ["EZ_INPUT_PORT"]),
+        ez_worker_port=int(os.environ["EZ_WORKER_PORT"]),
+        service_name=os.environ["SERVICE_NAME"].encode("utf-8"),
+        mocks=echo_mock
+    )
 
 
 if __name__ == '__main__':
