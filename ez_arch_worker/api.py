@@ -2,6 +2,8 @@ import ez_arch_worker.lib.app as ez_app
 import ez_arch_worker.lib.worker as worker
 import ez_arch_worker.lib.req as req
 
+import ez_arch_worker.test.mock_router as mock_router
+
 
 Frames = ez_app.Frames
 Handler = ez_app.Handler

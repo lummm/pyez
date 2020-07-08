@@ -1,18 +1,23 @@
 import asyncio
 import os
 import logging
+import time
 from typing import Callable
+from typing import Dict
 from typing import List
+from typing import Tuple
 from types import SimpleNamespace
 
 import zmq
 import zmq.asyncio
 
-import protoc
+import ez_arch_worker.lib.protoc as protoc
 
 
 POLL_INTERVAL_MS = 3000
 WORKER_LIFETIME_S = 4000
+
+Mocks = Callable[[List[bytes]], List[bytes]]
 
 
 class App(SimpleNamespace):
@@ -20,7 +25,7 @@ class App(SimpleNamespace):
     EZ_WORKER_PORT: int
     service_name: bytes
     ctx: zmq.asyncio.Context
-    mocks: Callable[[List[bytes]], List[bytes]]
+    mocks: Mocks
     poller: zmq.asyncio.Poller
     input_router: zmq.asyncio.Socket
     worker_addr: bytes
@@ -52,6 +57,22 @@ async def reconnect() -> None:
     app.poller = poller
     app.input_router = input_router
     app.worker_router = worker_router
+
+    loop = asyncio.get_event_loop()
+    timeout = time.time() + 2
+    try:
+        while time.time() < timeout:
+            frames = await asyncio.wait_for(
+                app.worker_router.recv_multipart(), 1)
+            await handle_worker(frames)
+            if app.worker_addr:
+                return
+    except Exception as e:
+        logging.exception("service failed to come online: %s", e)
+        loop.stop()
+        return
+    logging.error("service failed to come online")
+    loop.stop()
     return
 
 
@@ -124,8 +145,9 @@ async def run_mock_router(
         ez_input_port: int,
         ez_worker_port: int,
         service_name: bytes,
-        mocks: Callable[[List[bytes]], List[bytes]] = lambda x: []
+        mocks: Mocks = lambda x: []
 ):
+    assert type(service_name) == bytes
     app.EZ_INPUT_PORT = ez_input_port
     app.EZ_WORKER_PORT = ez_worker_port
     app.service_name = service_name
@@ -134,6 +156,22 @@ async def run_mock_router(
     while True:
         await route_loop()
     return
+
+
+def endpoint_mock(
+        endpoints: Dict[Tuple[bytes, bytes], Callable]
+) -> Mocks:
+    import json
+
+    def do_mock(frames: List[bytes]) -> List[bytes]:
+        service_name = frames[0]
+        path = frames[1]
+        args = json.loads(frames[2])
+        if (service_name, path) not in endpoints:
+            raise Exception("no mock for {} {}".format(service_name, path))
+        handler = endpoints[(service_name, path)]
+        return handler(**args)
+    return do_mock
 
 
 async def main():
