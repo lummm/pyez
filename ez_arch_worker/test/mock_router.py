@@ -148,6 +148,7 @@ async def run_mock_router(
         ez_input_port: int,
         ez_worker_port: int,
         service_name: bytes,
+        on_con: asyncio.Queue = None,
         mocks: Mocks = lambda x: []
 ):
     assert type(service_name) == bytes
@@ -156,6 +157,8 @@ async def run_mock_router(
     app.service_name = service_name
     app.mocks = mocks
     await reconnect()
+    if on_con:
+        on_con.put_nowait(True)
     while True:
         await route_loop()
     return
