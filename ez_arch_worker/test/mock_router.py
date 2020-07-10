@@ -36,8 +36,6 @@ app = App()
 
 
 async def reconnect() -> None:
-    if getattr(app, "poller", None):
-        [app.poller.unregister(s) for s in app.poller.sockets]
     if getattr(app, "ctx", None):
         app.ctx.destroy(0)
     ctx = zmq.asyncio.Context()

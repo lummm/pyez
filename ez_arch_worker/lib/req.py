@@ -69,9 +69,10 @@ async def full_req(
         try:
             res = await single_req(state, req_id, frames, timeout_ms)
             state.responses.pop(req_id, None)
-        except Exception as e:
+        except asyncio.TimeoutError as e:
             attempt = attempt + 1
             if attempt > attempts:
+                logging.error("request timed out")
                 state.responses.pop(req_id, None)
                 raise e
     return state, res
