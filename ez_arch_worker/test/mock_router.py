@@ -15,7 +15,7 @@ import ez_arch_worker.lib.protoc as protoc
 
 
 POLL_INTERVAL_MS = 3000
-WORKER_LIFETIME_S = 4000
+WORKER_ONLINE_TIMEOUT_S = 4
 
 Mocks = Callable[[List[bytes]], List[bytes]]
 
@@ -28,7 +28,7 @@ class App(SimpleNamespace):
     mocks: Mocks
     poller: zmq.asyncio.Poller
     input_router: zmq.asyncio.Socket
-    worker_addr: bytes
+    worker_addr: bytes = b""
     worker_router: zmq.asyncio.Socket
 
 
@@ -57,12 +57,17 @@ async def reconnect() -> None:
     app.worker_router = worker_router
 
     loop = asyncio.get_event_loop()
-    timeout = time.time() + 2
+    timeout = time.time() + WORKER_ONLINE_TIMEOUT_S
     try:
         while time.time() < timeout:
-            frames = await asyncio.wait_for(
-                app.worker_router.recv_multipart(), 1)
-            await handle_worker(frames)
+            frames = None
+            try:
+                frames = await asyncio.wait_for(
+                    app.worker_router.recv_multipart(), 1)
+            except asyncio.TimeoutError:
+                pass
+            if frames:
+                await handle_worker(frames)
             if app.worker_addr:
                 return
     except Exception as e:
