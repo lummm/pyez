@@ -206,6 +206,9 @@ class Router:
         except asyncio.CancelledError:
             logging.info("routing shutting down")
             return
+        except Exception as e:
+            logging.exception("router caught err: %s", e)
+            asyncio.get_event_loop().stop()
         return
 
 
