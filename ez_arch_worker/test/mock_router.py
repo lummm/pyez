@@ -15,7 +15,7 @@ import ez_arch_worker.lib.protoc as protoc
 
 
 POLL_INTERVAL_MS = 1000
-WORKER_ONLINE_TIMEOUT_S = 4
+WORKER_ONLINE_TIMEOUT_S = 7
 
 Mocks = Callable[[List[bytes]], List[bytes]]
 
@@ -35,7 +35,7 @@ class App(SimpleNamespace):
 app = App()
 
 
-async def reconnect() -> None:
+async def reconnect(timeout_s: float) -> None:
     if getattr(app, "ctx", None):
         app.ctx.destroy(0)
     ctx = zmq.asyncio.Context()
@@ -57,7 +57,7 @@ async def reconnect() -> None:
     app.worker_router = worker_router
 
     loop = asyncio.get_event_loop()
-    timeout = time.time() + WORKER_ONLINE_TIMEOUT_S
+    timeout = time.time() + timeout_s
     try:
         while time.time() < timeout:
             frames = None
@@ -167,7 +167,8 @@ class Router:
     async def start(
             self,
             service_name: bytes,
-            mocks: Mocks = lambda x: []
+            mocks: Mocks = lambda x: [],
+            online_timeout_s: int = WORKER_ONLINE_TIMEOUT_S
     ):
         if self.task:
             logging.error("already started")
@@ -176,7 +177,7 @@ class Router:
         app.service_name = service_name
         app.mocks = mocks
         app.worker_addr = b""
-        await reconnect()
+        await reconnect(online_timeout_s)
         self.task = asyncio.create_task(self._run())
         return
 
