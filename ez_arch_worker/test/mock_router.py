@@ -14,7 +14,7 @@ import zmq.asyncio
 import ez_arch_worker.lib.protoc as protoc
 
 
-POLL_INTERVAL_MS = 3000
+POLL_INTERVAL_MS = 1000
 WORKER_ONLINE_TIMEOUT_S = 4
 
 Mocks = Callable[[List[bytes]], List[bytes]]
@@ -69,6 +69,7 @@ async def reconnect() -> None:
             if frames:
                 await handle_worker(frames)
             if app.worker_addr:
+                logging.info("service online")
                 return
     except Exception as e:
         logging.exception("service failed to come online: %s", e)
@@ -94,11 +95,11 @@ async def handle_req(
     body = frames[1:]
     res_body = app.mocks(body)
     res = [return_addr, b"", request_id] + res_body
-    await handle_reply(res)
+    handle_reply(res)
     return
 
 
-async def handle_reply(frames) -> None:
+def handle_reply(frames) -> None:
     app.input_router.send_multipart(frames)
     return
 
@@ -128,7 +129,7 @@ async def handle_worker(frames) -> None:
         on_heartbeat(worker_addr, body)
         return
     if msg_type == protoc.REPLY:
-        await handle_reply(body)
+        handle_reply(body)
     return
 
 
@@ -137,30 +138,9 @@ async def route_loop() -> None:
     if app.input_router in sockets:
         frames = await app.input_router.recv_multipart()
         asyncio.create_task(handle_input(frames))
-    if app.worker_router in sockets:
+    elif app.worker_router in sockets:
         frames = await app.worker_router.recv_multipart()
         asyncio.create_task(handle_worker(frames))
-    return
-
-
-async def run_mock_router(
-        *,
-        ez_input_port: int,
-        ez_worker_port: int,
-        service_name: bytes,
-        on_con: asyncio.Queue = None,
-        mocks: Mocks = lambda x: []
-):
-    assert type(service_name) == bytes
-    app.EZ_INPUT_PORT = ez_input_port
-    app.EZ_WORKER_PORT = ez_worker_port
-    app.service_name = service_name
-    app.mocks = mocks
-    await reconnect()
-    if on_con:
-        on_con.put_nowait(True)
-    while True:
-        await route_loop()
     return
 
 
@@ -180,18 +160,54 @@ def endpoint_mock(
     return do_mock
 
 
-async def main():
-    logging.basicConfig(level="INFO")
+class Router:
 
-    def echo_mock(frames):
-        return [b"OK", frames[2]]
-    await run_mock_router(
-        ez_input_port=int(os.environ["EZ_INPUT_PORT"]),
-        ez_worker_port=int(os.environ["EZ_WORKER_PORT"]),
-        service_name=os.environ["SERVICE_NAME"].encode("utf-8"),
-        mocks=echo_mock
-    )
+    task: asyncio.Task = None
+
+    async def start(
+            self,
+            service_name: bytes,
+            mocks: Mocks = lambda x: []
+    ):
+        if self.task:
+            logging.error("already started")
+            raise Exception("mock router already started")
+        assert type(service_name) == bytes
+        app.service_name = service_name
+        app.mocks = mocks
+        app.worker_addr = b""
+        await reconnect()
+        self.task = asyncio.create_task(self._run())
+        return
+
+    async def close(self):
+        if self.task:
+            self.task.cancel()
+            self.task = None
+        if app.ctx:
+            app.ctx.destroy()
+        app.worker_addr = b""
+        return
+
+    def is_running(self) -> bool:
+        return not not self.task
+
+    async def _run(self):
+        logging.info("running mock router")
+        try:
+            while True:
+                await route_loop()
+        except asyncio.CancelledError:
+            logging.info("routing shutting down")
+            return
+        return
 
 
-if __name__ == '__main__':
-    asyncio.run(main())
+def get_mock_router(
+        *,
+        ez_input_port: int,
+        ez_worker_port: int,
+) -> Router:
+    app.EZ_INPUT_PORT = ez_input_port
+    app.EZ_WORKER_PORT = ez_worker_port
+    return Router()
