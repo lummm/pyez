@@ -37,7 +37,7 @@ app = App()
 
 async def reconnect(timeout_s: float) -> None:
     if getattr(app, "ctx", None):
-        app.ctx.destroy(0)
+        app.ctx.destroy()
     ctx = zmq.asyncio.Context()
     poller = zmq.asyncio.Poller()
     input_router = ctx.socket(zmq.ROUTER)
@@ -185,8 +185,13 @@ class Router:
         if self.task:
             self.task.cancel()
             self.task = None
+        if app.poller:
+            app.poller.unregister(app.worker_router)
+            app.poller.unregister(app.input_router)
+            app.poller = None
         if app.ctx:
             app.ctx.destroy()
+            app.ctx = None
         app.worker_addr = b""
         return
 
