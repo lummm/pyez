@@ -42,6 +42,7 @@ async def reconnect(timeout_s: float) -> None:
     poller = zmq.asyncio.Poller()
     input_router = ctx.socket(zmq.ROUTER)
     worker_router = ctx.socket(zmq.ROUTER)
+    app.worker_addr = b""
 
     input_router.bind("tcp://*:{}".format(app.EZ_INPUT_PORT))
     logging.info("input listening at %s", app.EZ_INPUT_PORT)
@@ -59,24 +60,23 @@ async def reconnect(timeout_s: float) -> None:
     loop = asyncio.get_event_loop()
     timeout = time.time() + timeout_s
     try:
+        frames = None
         while time.time() < timeout:
-            frames = None
-            try:
-                frames = await asyncio.wait_for(
-                    app.worker_router.recv_multipart(), 1)
-            except asyncio.TimeoutError:
-                pass
-            if frames:
+            sockets = dict(await app.poller.poll(POLL_INTERVAL_MS))
+            if app.worker_router in sockets:
+                frames = await app.worker_router.recv_multipart()
                 await handle_worker(frames)
-            if app.worker_addr:
-                logging.info("service online")
-                return
-    except Exception as e:
-        logging.exception("service failed to come online: %s", e)
+                if app.worker_addr:
+                    logging.info("service online at %s", app.worker_addr)
+                    return
+        logging.error("service failed to come online after %s s", timeout_s)
         loop.stop()
-        return
-    logging.error("service failed to come online")
-    loop.stop()
+        raise Exception("service online timeout")
+    except Exception as e:
+        logging.exception("error while service attempted to come online: %s",
+                          e)
+        loop.stop()
+        raise e
     return
 
 
@@ -208,7 +208,10 @@ class Router:
             return
         except Exception as e:
             logging.exception("router caught err: %s", e)
-            asyncio.get_event_loop().stop()
+            if app.task:
+                app.task.cancel()
+                app.task = None
+            return
         return
 
 
