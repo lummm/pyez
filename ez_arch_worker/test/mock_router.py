@@ -36,7 +36,6 @@ app = App()
 
 
 async def reconnect(timeout_s: float) -> None:
-    TRIALS = 2
     loop = asyncio.get_event_loop()
     timeout = time.time() + timeout_s
     while time.time() < timeout:
@@ -61,6 +60,7 @@ async def reconnect(timeout_s: float) -> None:
         app.input_router = input_router
         app.worker_router = worker_router
 
+        TRIALS = 3
         try:
             for i in range(TRIALS):
                 sockets = dict(await app.poller.poll(POLL_INTERVAL_MS))
