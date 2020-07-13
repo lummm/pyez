@@ -36,47 +36,47 @@ app = App()
 
 
 async def reconnect(timeout_s: float) -> None:
-    if getattr(app, "ctx", None):
-        app.ctx.destroy()
-    ctx = zmq.asyncio.Context()
-    poller = zmq.asyncio.Poller()
-    input_router = ctx.socket(zmq.ROUTER)
-    worker_router = ctx.socket(zmq.ROUTER)
-    app.worker_addr = b""
-
-    input_router.bind("tcp://*:{}".format(app.EZ_INPUT_PORT))
-    logging.info("input listening at %s", app.EZ_INPUT_PORT)
-    poller.register(input_router, zmq.POLLIN)
-
-    worker_router.bind("tcp://*:{}".format(app.EZ_WORKER_PORT))
-    logging.info("worker router listening at %s", app.EZ_WORKER_PORT)
-    poller.register(worker_router, zmq.POLLIN)
-
-    app.ctx = ctx
-    app.poller = poller
-    app.input_router = input_router
-    app.worker_router = worker_router
-
+    TRIALS = 2
     loop = asyncio.get_event_loop()
     timeout = time.time() + timeout_s
-    try:
-        frames = None
-        while time.time() < timeout:
-            sockets = dict(await app.poller.poll(POLL_INTERVAL_MS))
-            if app.worker_router in sockets:
-                frames = await app.worker_router.recv_multipart()
-                await handle_worker(frames)
-                if app.worker_addr:
-                    logging.info("service online at %s", app.worker_addr)
-                    return
-        logging.error("service failed to come online after %s s", timeout_s)
-        loop.stop()
-        raise Exception("service online timeout")
-    except Exception as e:
-        logging.exception("error while service attempted to come online: %s",
-                          e)
-        loop.stop()
-        raise e
+    while time.time() < timeout:
+        if getattr(app, "ctx", None):
+            app.ctx.destroy()
+        ctx = zmq.asyncio.Context()
+        poller = zmq.asyncio.Poller()
+        input_router = ctx.socket(zmq.ROUTER)
+        worker_router = ctx.socket(zmq.ROUTER)
+        app.worker_addr = b""
+
+        input_router.bind("tcp://*:{}".format(app.EZ_INPUT_PORT))
+        logging.info("input listening at %s", app.EZ_INPUT_PORT)
+        poller.register(input_router, zmq.POLLIN)
+
+        worker_router.bind("tcp://*:{}".format(app.EZ_WORKER_PORT))
+        logging.info("worker router listening at %s", app.EZ_WORKER_PORT)
+        poller.register(worker_router, zmq.POLLIN)
+
+        app.ctx = ctx
+        app.poller = poller
+        app.input_router = input_router
+        app.worker_router = worker_router
+
+        try:
+            for i in range(TRIALS):
+                sockets = dict(await app.poller.poll(POLL_INTERVAL_MS))
+                if app.worker_router in sockets:
+                    frames = await app.worker_router.recv_multipart()
+                    await handle_worker(frames)
+                    if app.worker_addr:
+                        logging.info("service online at %s", app.worker_addr)
+                        return
+        except Exception as e:
+            logging.exception(
+                "error while service attempted to come online: %s", e)
+            continue
+    logging.error("service failed to come online within %s s", timeout_s)
+    loop.stop()
+    raise Exception("service failed to come online")
     return
 
 
