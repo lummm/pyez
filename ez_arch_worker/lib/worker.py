@@ -32,6 +32,10 @@ async def listen_loop_body(
         client_return_addr = frames[1]
         request_id = frames[2]
         req_body = frames[3:]
+        if request_id in app.req_ids:
+            logging.info("not already serving req %s", request_id)
+            return
+        app.req_ids[request_id] = True
         loop.create_task(
             handle(req_body, client_return_addr, request_id))
     return
