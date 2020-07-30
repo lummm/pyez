@@ -11,13 +11,8 @@ async def handle(
         return_addr: bytes,
         request_id: bytes
 ) -> None:
-    try:
-        reply = await app.handler(work)  # type: ignore
-        msg.send_response(return_addr, request_id, reply)
-    except Exception as e:
-        loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
-        logging.exception("worker died: %s", e)
-        loop.stop()
+    reply = await app.handler(work)  # type: ignore
+    msg.send_response(return_addr, request_id, reply)
     return
 
 
@@ -33,11 +28,13 @@ async def listen_loop_body(
         request_id = frames[2]
         req_body = frames[3:]
         if request_id in app.req_ids:
-            logging.info("not already serving req %s", request_id)
+            logging.warn("already serving req %s", request_id)
             return
         app.req_ids[request_id] = True
-        loop.create_task(
+        await app.work_q.put(
             handle(req_body, client_return_addr, request_id))
+        # loop.create_task(
+        #     handle(req_body, client_return_addr, request_id))
     return
 
 
@@ -53,7 +50,21 @@ async def run_listen_loop() -> None:
     return
 
 
+async def run_handle_loop() -> None:
+    loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
+    while True:
+        try:
+            work = await app.work_q.get()
+            await work
+            app.work_q.task_done()
+        except Exception as e:
+            logging.exception("worker died: %s", e)
+            loop.stop()
+    return
+
+
 async def run_worker() -> None:
+    app.work_q = asyncio.Queue(1)
     try:
         await msg.connect()
     except Exception as e:
@@ -61,5 +72,9 @@ async def run_worker() -> None:
         loop = asyncio.get_event_loop()
         loop.stop()
         return
-    await run_listen_loop()
+    tasks = [
+        run_listen_loop(),
+        run_handle_loop(),
+    ]
+    await asyncio.gather(*[asyncio.create_task(t) for t in tasks])
     return

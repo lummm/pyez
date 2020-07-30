@@ -1,3 +1,4 @@
+import asyncio
 from typing import Awaitable
 from typing import Callable
 from typing import Dict
@@ -25,6 +26,7 @@ class App(SimpleNamespace):
     poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS
     req_ids: Dict[bytes, bool] = {}
     service_name: bytes = b""
+    work_q: asyncio.Queue = None
 
 
 state = App(handler=None)
