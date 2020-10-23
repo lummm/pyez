@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import time
 from typing import Dict
 from typing import Tuple
@@ -13,7 +14,7 @@ import ez_arch_worker.lib.protoc as protoc
 
 
 DEFAULT_TIMEOUT_MS = 5000
-DEFAULT_ATTEMPTS = 2
+DEFAULT_ATTEMPTS = 1
 DEFAULT_SOCKET_POOL = 100
 
 
@@ -24,6 +25,7 @@ class ClientState(SimpleNamespace):
     con_s: str
     socket: zmq.asyncio.Socket
     responses: Dict[bytes, asyncio.Queue]
+    identity: bytes = os.urandom(8)
 
 
 def reconnect(state: ClientState) -> None:
@@ -31,6 +33,7 @@ def reconnect(state: ClientState) -> None:
         state.socket.setsockopt(zmq.LINGER, 0)
         state.socket.close()
     socket = state.ctx.socket(zmq.DEALER)
+    socket.setsockopt(zmq.IDENTITY, state.identity)
     socket.connect(state.con_s)
     logging.info("dealer connected to %s", state.con_s)
     state.socket = socket
@@ -38,7 +41,7 @@ def reconnect(state: ClientState) -> None:
 
 
 def get_req_id() -> bytes:
-    return b"%f" % time.time()
+    return (b"%f" % time.time()) + os.urandom(1)
 
 
 async def single_req(

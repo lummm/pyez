@@ -25,6 +25,7 @@ async def listen_loop_body(
         frames = await socket.recv_multipart()
         assert b"" == frames[0]
         client_return_addr = frames[1]
+        logging.info("client return addr %s", client_return_addr)
         request_id = frames[2]
         req_body = frames[3:]
         if request_id in app.req_ids:

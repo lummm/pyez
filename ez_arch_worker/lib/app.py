@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import Awaitable
 from typing import Callable
 from typing import Dict
@@ -27,6 +28,7 @@ class App(SimpleNamespace):
     req_ids: Dict[bytes, bool] = {}
     service_name: bytes = b""
     work_q: asyncio.Queue = None
+    identity: bytes = os.urandom(8)
 
 
 state = App(handler=None)

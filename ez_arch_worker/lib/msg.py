@@ -1,4 +1,5 @@
 import logging
+import os
 
 import zmq
 
@@ -36,6 +37,9 @@ def send_heartbeat() -> None:
 
 async def connect() -> None:
     dealer = app.c.socket(zmq.DEALER)
+    dealer.setsockopt(
+        zmq.IDENTITY,
+        app.service_name + b"-" + app.identity)
     dealer.connect(app.con_s)
     logging.info("dealer connected to %s", app.con_s)
     app.poller.register(dealer, zmq.POLLIN)
