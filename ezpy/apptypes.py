@@ -1,13 +1,22 @@
 from typing import Awaitable
 from typing import Callable
 from typing import List
+from typing import NamedTuple
 
 import zmq.asyncio
 
 Ctx = zmq.asyncio.Context
 Frames = List[bytes]
-Handler = Callable[[Frames],
-                   Awaitable[Frames]]
 
 Socket = zmq.asyncio.Socket
 Poller = zmq.asyncio.Poller
+
+
+class Work(NamedTuple):
+    return_addr: bytes
+    req_id: bytes
+    body: Frames
+
+
+Handler = Callable[[Frames],
+                   Awaitable[Frames]]

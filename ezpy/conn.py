@@ -8,8 +8,10 @@ from .apptypes import Ctx
 from .apptypes import Frames
 from .apptypes import Handler
 from .apptypes import Socket
+from .apptypes import Work
 from .gen import run_as_forever_task
 from .msg import heartbeat
+from .msg import ack
 
 
 class Connection:
@@ -18,9 +20,10 @@ class Connection:
     dealer: Socket
     service_name: bytes
     identity: bytes
-    handler: Handler
     heartbeat_task: asyncio.Task
+    listen_task: asyncio.Task
     liveliness_s: int
+    work_q: asyncio.Queue
 
     def __init__(
             self, *,
@@ -35,17 +38,21 @@ class Connection:
         self.context = None
         self.dealer = None
         self.heartbeat_task = None
+        self.listen_task = None
+        self.work_q = None
         return
 
-    async def __aenter__(self) -> None:
+    async def __aenter__(self):
         self.context = Ctx()
         self.dealer = self.context.socket(zmq.DEALER)
         self.dealer.setsockopt(zmq.IDENTITY,
                                self.service_name + b"-" + self.identity)
         self.dealer.connect(self.con_s)
         logging.info("dealer connected to %s", self.con_s)
+        self.work_q = asyncio.Queue(1)
         await self.setup_heartbeat()
-        return
+        await self.setup_listen()
+        return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
         if self.heartbeat_task:
@@ -54,18 +61,6 @@ class Connection:
             self.dealer.close(0)
         if self.context:
             self.context.destroy(0)
-        return
-
-    async def connect(self) -> None:
-        self.context = Ctx()
-        self.dealer = self.context.socket(zmq.DEALER)
-        self.dealer.setsockopt(zmq.IDENTITY,
-                               self.service_name + b"-" + self.identity)
-        self.dealer.connect(self.con_s)
-        # self.poller = Poller()
-        # self.poller.register(self.dealer, zmq.POLLIN)
-        logging.info("dealer connected to %s", self.con_s)
-        await self.setup_heartbeat()
         return
 
     async def send(self, frames: Frames) -> None:
@@ -79,4 +74,27 @@ class Connection:
             await asyncio.sleep(self.liveliness_s)
             return
         self.heartbeat_task = run_as_forever_task(do_heartbeat)
+        return
+
+    async def setup_listen(self) -> None:
+        async def do_listen():
+            logging.info("my dealer: %s", self.dealer)
+            frames = await self.dealer.recv_multipart()
+            assert b"" == frames[0]
+            work = Work(
+                return_addr=frames[1],
+                req_id=frames[2],
+                body=frames[3:]
+            )
+            await self.work_q.put(work)
+            return
+        self.listen_task = run_as_forever_task(do_listen)
+        return
+
+    async def serve(self, handler: Handler) -> None:
+        while True:
+            work: Work = await self.work_q.get()
+            await self.send(ack(work.req_id))
+            res = await handler(work.body)
+            # send the response...
         return

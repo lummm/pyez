@@ -13,10 +13,11 @@ def run_as_forever_task(fn: Awaitable) -> asyncio.Task:
                 return
             except Exception as e:
                 logging.exception("""
------------------------------------------------------ loop crashed with:
+---------------------------------------------------------- loop crashed with:
 %s
 -----------------------------------------------------------------------------
                 """, e)
                 asyncio.get_event_loop() \
                        .stop()
+                return
     return asyncio.create_task(_fn())
