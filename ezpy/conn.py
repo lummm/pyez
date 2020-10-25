@@ -8,6 +8,7 @@ from .apptypes import Ctx
 from .apptypes import Frames
 from .apptypes import Handler
 from .apptypes import Socket
+from .gen import run_as_forever_task
 from .msg import heartbeat
 
 
@@ -73,24 +74,9 @@ class Connection:
 
     async def setup_heartbeat(self) -> None:
         async def do_heartbeat():
-            while True:
-                try:
-                    logging.info("heartbeat")
-                    await self.send(heartbeat(self.service_name))
-                    await asyncio.sleep(self.liveliness_s)
-                except asyncio.CancelledError:
-                    logging.info("CANCELLED!")
-                    return
-                except Exception as e:
-                    logging.exception(
-                        """
------------------------------------------------------ heartbeat crashed with:
-%s
------------------------------------------------------------------------------
-                        """, e)
-                    asyncio.get_event_loop() \
-                        .stop()
-                    return
+            logging.info("heartbeat")
+            await self.send(heartbeat(self.service_name))
+            await asyncio.sleep(self.liveliness_s)
             return
-        self.heartbeat_task = asyncio.create_task(do_heartbeat())
+        self.heartbeat_task = run_as_forever_task(do_heartbeat)
         return
