@@ -9,7 +9,6 @@ def run_as_forever_task(fn: Awaitable) -> asyncio.Task:
             try:
                 await fn()
             except asyncio.CancelledError:
-                logging.info("CANCELLED!")
                 return
             except Exception as e:
                 logging.exception("""

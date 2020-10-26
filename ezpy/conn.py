@@ -12,6 +12,7 @@ from .apptypes import Work
 from .gen import run_as_forever_task
 from .msg import heartbeat
 from .msg import ack
+from .msg import response
 
 
 class Connection:
@@ -69,7 +70,6 @@ class Connection:
 
     async def setup_heartbeat(self) -> None:
         async def do_heartbeat():
-            logging.info("heartbeat")
             await self.send(heartbeat(self.service_name))
             await asyncio.sleep(self.liveliness_s)
             return
@@ -78,7 +78,6 @@ class Connection:
 
     async def setup_listen(self) -> None:
         async def do_listen():
-            logging.info("my dealer: %s", self.dealer)
             frames = await self.dealer.recv_multipart()
             assert b"" == frames[0]
             work = Work(
@@ -95,6 +94,8 @@ class Connection:
         while True:
             work: Work = await self.work_q.get()
             await self.send(ack(work.req_id))
-            res = await handler(work.body)
-            # send the response...
+            reply = await handler(work.body)
+            logging.info("sending res...")
+            await self.send(
+                response(work.return_addr, work.req_id, reply))
         return
