@@ -18,11 +18,10 @@ def ack(req_id: bytes) -> Frames:
 
 
 def response(
-        return_addr: bytes,
         req_id: bytes,
         reply: Frames
 ) -> Frames:
-    return _as_msg([REPLY, return_addr, b"", req_id] + reply)
+    return _as_msg([REPLY, req_id] + reply)
 
 
 def _as_msg(frames: Frames) -> Frames:

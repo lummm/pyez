@@ -13,7 +13,6 @@ Poller = zmq.asyncio.Poller
 
 
 class Work(NamedTuple):
-    return_addr: bytes
     req_id: bytes
     body: Frames
 

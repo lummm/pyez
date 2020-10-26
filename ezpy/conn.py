@@ -86,9 +86,8 @@ class Connection:
             frames = await self.dealer.recv_multipart()
             assert b"" == frames[0]
             work = Work(
-                return_addr=frames[1],
-                req_id=frames[2],
-                body=frames[3:])
+                req_id=frames[1],
+                body=frames[2:])
             await self.work_q.put(work)
             return
         self.listen_task = run_as_forever_task(do_listen)
@@ -102,8 +101,7 @@ class Connection:
             self.active_workers += 1
             await self.send(ack(work.req_id))
             reply = await handler(work.body)
-            await self.send(
-                response(work.return_addr, work.req_id, reply))
+            await self.send(response(work.req_id, reply))
             self.active_workers -= 1
             return
         await asyncio.gather(*[
