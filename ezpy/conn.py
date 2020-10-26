@@ -26,6 +26,7 @@ class Connection:
     liveliness_s: int
     work_q: asyncio.Queue
     q_length: int
+    active_workers: int
 
     def __init__(
             self, *,
@@ -39,6 +40,7 @@ class Connection:
         self.identity = os.urandom(8)
         self.liveliness_s = livelieness_s
         self.q_length = q_length
+        self.active_workers = 0
         self.context = None
         self.dealer = None
         self.heartbeat_task = None
@@ -88,21 +90,23 @@ class Connection:
                 req_id=frames[2],
                 body=frames[3:])
             await self.work_q.put(work)
-            await self.send(ack(work.req_id))
             return
         self.listen_task = run_as_forever_task(do_listen)
         return
 
     async def serve(self, handler: Handler) -> None:
-        def make_worker(i):
-            async def do_work() -> None:
-                work: Work = await self.work_q.get()
-                reply = await handler(work.body)
-                await self.send(
-                    response(work.return_addr, work.req_id, reply))
+        async def do_work() -> None:
+            work: Work = await self.work_q.get()
+            if self.active_workers >= self.q_length:
                 return
-            return do_work
+            self.active_workers += 1
+            await self.send(ack(work.req_id))
+            reply = await handler(work.body)
+            await self.send(
+                response(work.return_addr, work.req_id, reply))
+            self.active_workers -= 1
+            return
         await asyncio.gather(*[
-            run_as_forever_task(make_worker(i))
+            run_as_forever_task(do_work)
             for i in range(self.q_length + 1)])
         return
