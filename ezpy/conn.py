@@ -25,17 +25,20 @@ class Connection:
     listen_task: asyncio.Task
     liveliness_s: int
     work_q: asyncio.Queue
+    q_length: int
 
     def __init__(
             self, *,
             con_s: str,
             service_name: bytes,
-            livelieness_s: int
+            livelieness_s: int,
+            q_length: int = 50
     ):
         self.con_s = con_s
         self.service_name = service_name
         self.identity = os.urandom(8)
         self.liveliness_s = livelieness_s
+        self.q_length = q_length
         self.context = None
         self.dealer = None
         self.heartbeat_task = None
@@ -83,19 +86,23 @@ class Connection:
             work = Work(
                 return_addr=frames[1],
                 req_id=frames[2],
-                body=frames[3:]
-            )
+                body=frames[3:])
             await self.work_q.put(work)
+            await self.send(ack(work.req_id))
             return
         self.listen_task = run_as_forever_task(do_listen)
         return
 
     async def serve(self, handler: Handler) -> None:
-        while True:
-            work: Work = await self.work_q.get()
-            await self.send(ack(work.req_id))
-            reply = await handler(work.body)
-            logging.info("sending res...")
-            await self.send(
-                response(work.return_addr, work.req_id, reply))
+        def make_worker(i):
+            async def do_work() -> None:
+                work: Work = await self.work_q.get()
+                reply = await handler(work.body)
+                await self.send(
+                    response(work.return_addr, work.req_id, reply))
+                return
+            return do_work
+        await asyncio.gather(*[
+            run_as_forever_task(make_worker(i))
+            for i in range(self.q_length + 1)])
         return
