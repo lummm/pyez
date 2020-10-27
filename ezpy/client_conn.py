@@ -87,6 +87,5 @@ class ClientConnection:
             logging.warn("req %s timed out", req_id)
             return [b"EZ_ERR", b"TIMEOUT"]
         finally:
-            logging.info("clearing req_id %s", req_id)
             self.responses.pop(req_id, None)
         return res

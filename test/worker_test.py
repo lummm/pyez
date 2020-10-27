@@ -10,8 +10,7 @@ import ezpy
 async def test_handler(frames):
     logging.info("handling...")
     await asyncio.sleep(2)
-    return [b"OK",
-            json.dumps("HEY!").encode("utf-8")]
+    return [b"OK", json.dumps("HEY!").encode("utf-8")]
 
 
 async def main():
