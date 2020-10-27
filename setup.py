@@ -11,7 +11,7 @@ setup(name='pyez',
       url='https://github.com/tengelisconsulting/pyez',
       download_url=("https://github.com"
                     "/tengelisconsulting/pyez"
-                    "/archive/v0.1.0.tar.gz"),
+                    "/archive/v0.1.1.tar.gz"),
       packages=find_packages(),
       package_data={
           '': ['*.yaml'],
