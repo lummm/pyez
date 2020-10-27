@@ -3,7 +3,7 @@
 from setuptools import find_packages, setup
 
 
-setup(name='ezpy',
+setup(name='pyez',
       version='v0.1.0',
       description='Worker API for the EZ Arch framework',
       author='Liam Tengelis',
@@ -16,4 +16,4 @@ setup(name='ezpy',
       package_data={
           '': ['*.yaml'],
       },
-)
+      python_requires='>=3.8')

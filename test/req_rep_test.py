@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-import ezpy
+import pyez
 
 
 ZMQ_REQ_PORT = 9999
@@ -12,7 +12,7 @@ SERVER_DURATION = 2000
 
 
 def new_con():
-    return ezpy.WorkerConnection(
+    return pyez.WorkerConnection(
         con_s=f"tcp://localhost:{WORKER_PORT}",
         service_name=b"TEST",
         liveliness=LIVELINESS)
@@ -32,12 +32,12 @@ async def test_serve_ok() -> None:
     REQ = [b"big", b"test"]
     RES = [b"big", b"response"]
 
-    async def handler(req: ezpy.Frames):
+    async def handler(req: pyez.Frames):
         assert req == REQ
         return [b"OK"] + RES
 
     async def do_req():
-        async with ezpy.ClientConnection(
+        async with pyez.ClientConnection(
                 f"tcp://localhost:{ZMQ_REQ_PORT}") as conn:
             res = await conn.req(b"TEST", REQ)
             assert res == ([b"OK"] + RES)
@@ -53,12 +53,12 @@ async def test_serve_err() -> None:
     REQ = [b"big", b"test"]
     RES = [b"big", b"response"]
 
-    async def handler(req: ezpy.Frames):
+    async def handler(req: pyez.Frames):
         assert req == REQ
         return [b"ERR"] + RES
 
     async def do_req():
-        async with ezpy.ClientConnection(
+        async with pyez.ClientConnection(
                 f"tcp://localhost:{ZMQ_REQ_PORT}") as conn:
             res = await conn.req(b"TEST", REQ)
             assert res == ([b"SERVICE_ERR"] + RES)
@@ -71,12 +71,12 @@ async def test_serve_err() -> None:
 
 
 async def test_timeout() -> None:
-    async def handler(req: ezpy.Frames):
+    async def handler(req: pyez.Frames):
         await asyncio.sleep(100)
         return [b"OK", b"nothing"]
 
     async def do_req():
-        async with ezpy.ClientConnection(
+        async with pyez.ClientConnection(
                 f"tcp://localhost:{ZMQ_REQ_PORT}") as conn:
             res = await conn.req(b"TEST", [b"any", b"thing"])
             assert res == ([b"EZ_ERR", b"TIMEOUT"])
@@ -90,7 +90,7 @@ async def test_timeout() -> None:
 
 async def test_no_service() -> None:
     async def do_req():
-        async with ezpy.ClientConnection(
+        async with pyez.ClientConnection(
                 f"tcp://localhost:{ZMQ_REQ_PORT}") as conn:
             res = await conn.req(b"TEST", [b"any", b"thing"],
                                  timeout=10000)
