@@ -11,6 +11,13 @@ LIVELINESS = 3000
 SERVER_DURATION = 2000
 
 
+def assert_eq(exp, act):
+    if exp != act:
+        raise AssertionError(
+            "expected {}, actual: {}".format(exp, act))
+    return
+
+
 def new_con():
     return pyez.WorkerConnection(
         con_s=f"tcp://localhost:{WORKER_PORT}",
@@ -33,14 +40,14 @@ async def test_serve_ok() -> None:
     RES = [b"big", b"response"]
 
     async def handler(req: pyez.Frames):
-        assert req == REQ
+        assert_eq(req, REQ)
         return [b"OK"] + RES
 
     async def do_req():
         async with pyez.ClientConnection(
                 f"tcp://localhost:{ZMQ_REQ_PORT}") as conn:
             res = await conn.req(b"TEST", REQ)
-            assert res == ([b"OK"] + RES)
+            assert_eq(res, ([b"OK"] + RES))
         return
 
     server_task = asyncio.create_task(serve(handler))
@@ -61,7 +68,7 @@ async def test_serve_err() -> None:
         async with pyez.ClientConnection(
                 f"tcp://localhost:{ZMQ_REQ_PORT}") as conn:
             res = await conn.req(b"TEST", REQ)
-            assert res == ([b"SERVICE_ERR"] + RES)
+            assert_eq(res, ([b"SERVICE_ERR"] + RES))
         return
 
     server_task = asyncio.create_task(serve(handler))
@@ -79,7 +86,7 @@ async def test_timeout() -> None:
         async with pyez.ClientConnection(
                 f"tcp://localhost:{ZMQ_REQ_PORT}") as conn:
             res = await conn.req(b"TEST", [b"any", b"thing"])
-            assert res == ([b"EZ_ERR", b"TIMEOUT"])
+            assert_eq(res, ([b"EZ_ERR", b"TIMEOUT"]))
         return
 
     server_task = asyncio.create_task(serve(handler))
@@ -94,7 +101,7 @@ async def test_no_service() -> None:
                 f"tcp://localhost:{ZMQ_REQ_PORT}") as conn:
             res = await conn.req(b"TEST", [b"any", b"thing"],
                                  timeout=10000)
-            assert res == ([b"EZ_ERR", b"NO_SERVICE"])
+            assert_eq(res, ([b"EZ_ERR", b"NO_SERVICE"]))
         return
 
     await do_req()

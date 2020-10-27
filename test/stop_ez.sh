@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker stop tengelisconsulting/ez
+docker stop ez
