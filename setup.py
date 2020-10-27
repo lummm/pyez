@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 
 
 setup(name='pyez',
-      version='v0.1.0',
+      version='v0.1.1',
       description='Worker API for the EZ Arch framework',
       author='Liam Tengelis',
       author_email='liam@tengelisconsulting.com',
