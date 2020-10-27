@@ -1,7 +1,6 @@
 #!/usr/bin/env python3.8
 
 import asyncio
-import json
 import logging
 
 import ezpy
@@ -9,7 +8,7 @@ import ezpy
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    async with ezpy.ClientConnection("tcp://localhost:9000") as conn:
+    async with ezpy.ClientConnection("tcp://localhost:9999") as conn:
         res = await asyncio.gather(*[
             conn.req(b"TEST", [b"request"])
             for i in range(10)

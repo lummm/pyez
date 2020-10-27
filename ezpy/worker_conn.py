@@ -23,7 +23,7 @@ class WorkerConnection:
     identity: bytes
     heartbeat_task: asyncio.Task
     listen_task: asyncio.Task
-    liveliness_s: int
+    liveliness_s: float
     work_q: asyncio.Queue
     q_length: int
     active_workers: int
@@ -48,13 +48,13 @@ class WorkerConnection:
             self, *,
             con_s: str,
             service_name: bytes,
-            livelieness_s: int,
+            liveliness: int,
             q_length: int = 50
     ):
         self.con_s = con_s
         self.service_name = service_name
         self.identity = os.urandom(8)
-        self.liveliness_s = livelieness_s
+        self.liveliness_s = liveliness / 1000.0
         self.q_length = q_length
         self.active_workers = 0
         self.context = None

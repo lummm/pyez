@@ -16,9 +16,9 @@ async def test_handler(frames):
 async def main():
     logging.basicConfig(level=logging.INFO)
     async with ezpy.WorkerConnection(
-        con_s="tcp://localhost:9004",
+        con_s="tcp://localhost:9998",
         service_name=b"TEST",
-            livelieness_s=2,
+            livelieness=2000,
             q_length=5
     ) as conn:
         await conn.serve(test_handler)
